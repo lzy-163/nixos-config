@@ -1,4 +1,5 @@
 self: super: with super; {
+
   feather-font = let
     version = "1.0";
     pname = "feather-font";
@@ -23,7 +24,7 @@ self: super: with super; {
       description = "Set of font icons from the open source collection Feather Icons";
       license = licenses.mit;
       maintainers = [ maintainers.dlyons ];
-      platforms = [ "x86_64-linux" "x86_64-darwin" ];
+      platforms = [ platforms.x86_64-linux platforms.x86_64-darwin ];
     };
   };
 }

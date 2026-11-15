@@ -2,13 +2,18 @@
 
 with pkgs; [
   # General packages for development and system management
+  act
   alacritty
+  aspell
+  aspellDicts.en
   bash-completion
   bat
   btop
   coreutils
   killall
+  neofetch
   openssh
+  pandoc
   sqlite
   wget
   zip
@@ -18,10 +23,21 @@ with pkgs; [
   age-plugin-yubikey
   gnupg
   libfido2
+  pinentry
+  yubikey-manager
 
   # Cloud-related tools and SDKs
-  docker
-  docker-compose
+  #
+  # docker marked broken as of Nov 15, 2023
+  # https://github.com/NixOS/nixpkgs/issues/267685
+  #
+  # docker
+  # docker-compose
+  #
+  awscli2
+  flyctl
+  ngrok
+  tflint
 
   # Media-related packages
   emacs-all-the-icons-fonts
@@ -31,14 +47,19 @@ with pkgs; [
   font-awesome
   hack-font
   noto-fonts
-  noto-fonts-color-emoji
+  noto-fonts-emoji
   meslo-lgs-nf
 
   # Node.js development tools
-  nodejs_24
+  nodePackages.nodemon
+  nodePackages.prettier
+  nodePackages.npm # globally install npm
+  nodejs
 
   # Text and terminal utilities
   htop
+  hunspell
+  iftop
   jetbrains-mono
   jq
   ripgrep
@@ -47,24 +68,8 @@ with pkgs; [
   unrar
   unzip
   zsh-powerlevel10k
-  
-  # Development tools
-  curl
-  gh
-  terraform
-  kubectl
-  awscli2
-  lazygit
-  fzf
-  direnv
-  
-  # Programming languages and runtimes
-  go
-  rustc
-  cargo
-  openjdk
 
   # Python packages
-  python3
-  virtualenv
+  python39
+  python39Packages.virtualenv # globally install virtualenv
 ]

@@ -8,37 +8,42 @@ let user = "%USER%"; in
     ../../modules/darwin/secrets.nix
     ../../modules/darwin/home-manager.nix
     ../../modules/shared
+    ../../modules/shared/cachix
      agenix.darwinModules.default
   ];
 
+  # Auto upgrade nix package and the daemon service.
+  services.nix-daemon.enable = true;
+
   # Setup user, packages, programs
   nix = {
-    package = pkgs.nix;
-
-    settings = {
-      trusted-users = [ "@admin" "${user}" ];
-      substituters = [ "https://nix-community.cachix.org" "https://cache.nixos.org" ];
-      trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
-    };
+    package = pkgs.nixUnstable;
+    settings.trusted-users = [ "@admin" "${user}" ];
 
     gc = {
+      user = "root";
       automatic = true;
       interval = { Weekday = 0; Hour = 2; Minute = 0; };
       options = "--delete-older-than 30d";
     };
 
+    # Turn this on to make command line easier
     extraOptions = ''
       experimental-features = nix-command flakes
     '';
   };
 
   # Turn off NIX_PATH warnings now that we're using flakes
+  system.checks.verifyNixPath = false;
 
   # Load configuration that is shared across systems
   environment.systemPackages = with pkgs; [
     emacs-unstable
     agenix.packages."${pkgs.system}".default
   ] ++ (import ../../modules/shared/packages.nix { inherit pkgs; });
+
+  # Enable fonts dir
+  fonts.fontDir.enable = true;
 
   launchd.user.agents.emacs.path = [ config.environment.systemPath ];
   launchd.user.agents.emacs.serviceConfig = {
@@ -53,9 +58,7 @@ let user = "%USER%"; in
   };
 
   system = {
-    checks.verifyNixPath = false;
-    primaryUser = user;
-    stateVersion = 5;
+    stateVersion = 4;
 
     defaults = {
       NSGlobalDomain = {
@@ -89,6 +92,11 @@ let user = "%USER%"; in
         Clicking = true;
         TrackpadThreeFingerDrag = true;
       };
+    };
+
+    keyboard = {
+      enableKeyMapping = true;
+      remapCapsLockToControl = true;
     };
   };
 }

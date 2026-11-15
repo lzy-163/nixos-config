@@ -3,35 +3,44 @@
 let user = "%USER%"; in
 
 {
+
   imports = [
     ../../modules/darwin/home-manager.nix
     ../../modules/shared
+    ../../modules/shared/cachix
   ];
 
-  nix = {
-    package = pkgs.nix;
+  # Auto upgrade nix package and the daemon service.
+  services.nix-daemon.enable = true;
 
-    settings = {
-      trusted-users = [ "@admin" "${user}" ];
-      substituters = [ "https://nix-community.cachix.org" "https://cache.nixos.org" ];
-      trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
-    };
+  # Setup user, packages, programs
+  nix = {
+    package = pkgs.nixUnstable;
+    settings.trusted-users = [ "@admin" "${user}" ];
 
     gc = {
+      user = "root";
       automatic = true;
       interval = { Weekday = 0; Hour = 2; Minute = 0; };
       options = "--delete-older-than 30d";
     };
 
+    # Turn this on to make command line easier
     extraOptions = ''
       experimental-features = nix-command flakes
     '';
   };
 
+  # Turn off NIX_PATH warnings now that we're using flakes
+  system.checks.verifyNixPath = false;
 
+  # Load configuration that is shared across systems
   environment.systemPackages = with pkgs; [
     emacs-unstable
   ] ++ (import ../../modules/shared/packages.nix { inherit pkgs; });
+
+  # Enable fonts dir
+  fonts.fontDir.enable = true;
 
   launchd.user.agents.emacs.path = [ config.environment.systemPath ];
   launchd.user.agents.emacs.serviceConfig = {
@@ -46,17 +55,18 @@ let user = "%USER%"; in
   };
 
   system = {
-    checks.verifyNixPath = false;
-    primaryUser = user;
-    stateVersion = 5;
+    stateVersion = 4;
 
     defaults = {
       NSGlobalDomain = {
         AppleShowAllExtensions = true;
         ApplePressAndHoldEnabled = false;
 
-        KeyRepeat = 2; # Values: 120, 90, 60, 30, 12, 6, 2
-        InitialKeyRepeat = 15; # Values: 120, 94, 68, 35, 25, 15
+        # 120, 90, 60, 30, 12, 6, 2
+        KeyRepeat = 2;
+
+        # 120, 94, 68, 35, 25, 15
+        InitialKeyRepeat = 15;
 
         "com.apple.mouse.tapBehavior" = 1;
         "com.apple.sound.beep.volume" = 0.0;
@@ -79,6 +89,11 @@ let user = "%USER%"; in
         Clicking = true;
         TrackpadThreeFingerDrag = true;
       };
+    };
+
+    keyboard = {
+      enableKeyMapping = true;
+      remapCapsLockToControl = true;
     };
   };
 }
