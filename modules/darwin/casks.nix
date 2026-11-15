@@ -2,24 +2,24 @@ _:
 
 [
   # Development Tools
-  "claude"
+  "homebrew/cask/docker"
   "insomnia"
-  "tableplus"
   "ngrok"
   "postico"
   "visual-studio-code"
-  "wireshark-app"
+  "wireshark"
 
   # Communication Tools
   "discord"
   "loom"
+  "notion"
   "slack"
   "telegram"
   "zoom"
 
   # Utility Tools
   "appcleaner"
-  "syncthing-app"
+  "syncthing"
 
   # Entertainment Tools
   "steam"
@@ -31,4 +31,7 @@ _:
 
   # Browsers
   "google-chrome"
+
+  # AI
+  "diffusionbee"
 ]

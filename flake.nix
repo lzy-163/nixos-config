@@ -1,26 +1,9 @@
 {
-  description = "General Purpose Configuration for macOS and NixOS";
+  description = "Dustin's Configuration for NixOS and MacOS";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
-    home-manager.url = "github:nix-community/home-manager";
     agenix.url = "github:ryantm/agenix";
-    claude-desktop = {
-      url = "github:k3d3/claude-desktop-linux-flake";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
-    };
-    claude-code = {
-      url = "github:sadjow/claude-code-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    plasma-manager = {
-      url = "github:nix-community/plasma-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.home-manager.follows = "home-manager";
-    };
+    home-manager.url = "github:nix-community/home-manager";
     darwin = {
       url = "github:LnL7/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -39,7 +22,7 @@
     homebrew-cask = {
       url = "github:homebrew/homebrew-cask";
       flake = false;
-    };
+    }; 
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -48,16 +31,12 @@
       url = "git+ssh://git@github.com/dustinlyons/nix-secrets.git";
       flake = false;
     };
-    chaotic = {
-      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
-  outputs = { self, darwin, claude-desktop, claude-code, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, plasma-manager, nixpkgs, flake-utils, disko, agenix, secrets, chaotic } @inputs:
+  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, agenix, secrets } @inputs:
     let
       user = "dustin";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
-      darwinSystems = [ "aarch64-darwin" "x86_64-darwin" ];
+      darwinSystems = [ "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs (linuxSystems ++ darwinSystems) f;
       devShell = system: let pkgs = nixpkgs.legacyPackages.${system}; in {
         default = with pkgs; mkShell {
@@ -73,14 +52,12 @@
           #!/usr/bin/env bash
           PATH=${nixpkgs.legacyPackages.${system}.git}/bin:$PATH
           echo "Running ${scriptName} for ${system}"
-          exec ${self}/apps/${system}/${scriptName} "$@"
+          exec ${self}/apps/${system}/${scriptName}
         '')}/bin/${scriptName}";
       };
       mkLinuxApps = system: {
         "apply" = mkApp "apply" system;
         "build-switch" = mkApp "build-switch" system;
-        "build-switch-emacs" = mkApp "build-switch-emacs" system;
-        "clean" = mkApp "clean" system;
         "copy-keys" = mkApp "copy-keys" system;
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
@@ -91,37 +68,36 @@
         "apply" = mkApp "apply" system;
         "build" = mkApp "build" system;
         "build-switch" = mkApp "build-switch" system;
-        "clean" = mkApp "clean" system;
         "copy-keys" = mkApp "copy-keys" system;
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
-        "rollback" = mkApp "rollback" system;
       };
     in
     {
       templates = {
         starter = {
           path = ./templates/starter;
-          description = "Starter configuration without secrets";
+          description = "Starter configuration";
         };
-        starter-with-secrets = {
-          path = ./templates/starter-with-secrets;
+        starterWithSecrets = {
+          path = ./templates/starterWithSecrets;
           description = "Starter configuration with secrets";
         };
       };
       devShells = forAllSystems devShell;
       apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
-      darwinConfigurations = nixpkgs.lib.genAttrs darwinSystems (system:
-        darwin.lib.darwinSystem {
-          inherit system;
-          specialArgs = inputs // { inherit user; };
+
+      darwinConfigurations = let user = "dustin"; in {
+        "Dustins-MBP" = darwin.lib.darwinSystem {
+          system = "aarch64-darwin";
+          specialArgs = inputs;
           modules = [
             home-manager.darwinModules.home-manager
             nix-homebrew.darwinModules.nix-homebrew
             {
               nix-homebrew = {
-                inherit user;
                 enable = true;
+                user = "${user}";
                 taps = {
                   "homebrew/homebrew-core" = homebrew-core;
                   "homebrew/homebrew-cask" = homebrew-cask;
@@ -133,56 +109,23 @@
             }
             ./hosts/darwin
           ];
-        }
-      );
-      nixosConfigurations = 
-        # Platform-based configurations (current behavior)
-        nixpkgs.lib.genAttrs linuxSystems (system:
-          nixpkgs.lib.nixosSystem {
-            inherit system;
-            specialArgs = inputs // { inherit user; };
-            modules = [
-              disko.nixosModules.disko
-              chaotic.nixosModules.default
-              home-manager.nixosModules.home-manager {
-                home-manager = {
-                  sharedModules = [ plasma-manager.homeModules.plasma-manager ]; 
-                  useGlobalPkgs = true;
-                  useUserPackages = true;
-                  # Move a pre-existing dotfile aside rather than aborting the
-                  # whole switch when home-manager wants to write over it.
-                  backupFileExtension = "hm-bak";
-                  users.${user} = { config, pkgs, lib, ... }:
-                    import ./modules/nixos/home-manager.nix { inherit config pkgs lib inputs; };
-                };
-              }
-              ./hosts/nixos
-            ];
-          }
-        )
-        
-        // # Named host configurations
-        
-        {
-          garfield = nixpkgs.lib.nixosSystem {
-            system = "x86_64-linux";
-            specialArgs = inputs // { inherit user; };
-            modules = [
-              disko.nixosModules.disko
-              chaotic.nixosModules.default
-              home-manager.nixosModules.home-manager {
-                home-manager = {
-                  sharedModules = [ plasma-manager.homeModules.plasma-manager ];
-                  useGlobalPkgs = true;
-                  useUserPackages = true;
-                  backupFileExtension = "hm-bak";
-                  users.${user} = { config, pkgs, lib, ... }:
-                    import ./modules/nixos/home-manager.nix { inherit config pkgs lib inputs; };
-                };
-              }
-              ./hosts/nixos/garfield
-            ];
-          };
         };
-    };
+      };
+
+      nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = inputs;
+        modules = [
+          disko.nixosModules.disko
+          home-manager.nixosModules.home-manager {
+            home-manager = {
+              useGlobalPkgs = true;
+              useUserPackages = true;
+              users.${user} = import ./modules/nixos/home-manager.nix;
+            };
+          }
+          ./hosts/nixos
+        ];
+     });
+  };
 }

@@ -1,6 +1,5 @@
 {
-  description = "Starter Configuration for MacOS and NixOS";
-
+  description = "Starter Configuration for NixOS and MacOS";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
@@ -28,12 +27,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
-
   outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko } @inputs:
     let
       user = "%USER%";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
-      darwinSystems = [ "aarch64-darwin" "x86_64-darwin" ];
+      darwinSystems = [ "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs (linuxSystems ++ darwinSystems) f;
       devShell = system: let pkgs = nixpkgs.legacyPackages.${system}; in {
         default = with pkgs; mkShell {
@@ -55,7 +53,6 @@
       mkLinuxApps = system: {
         "apply" = mkApp "apply" system;
         "build-switch" = mkApp "build-switch" system;
-        "clean" = mkApp "clean" system;
         "copy-keys" = mkApp "copy-keys" system;
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
@@ -65,30 +62,26 @@
         "apply" = mkApp "apply" system;
         "build" = mkApp "build" system;
         "build-switch" = mkApp "build-switch" system;
-        "clean" = mkApp "clean" system;
         "copy-keys" = mkApp "copy-keys" system;
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
-        "rollback" = mkApp "rollback" system;
       };
     in
     {
       devShells = forAllSystems devShell;
       apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
-      darwinConfigurations = nixpkgs.lib.genAttrs darwinSystems (system: let
-        user = "%USER%";
-      in
-        darwin.lib.darwinSystem {
-          inherit system;
+      darwinConfigurations = let user = "%USER%"; in {
+        macos = darwin.lib.darwinSystem {
+          system = "aarch64-darwin";
           specialArgs = inputs;
           modules = [
             home-manager.darwinModules.home-manager
             nix-homebrew.darwinModules.nix-homebrew
             {
               nix-homebrew = {
-                inherit user;
                 enable = true;
+                user = "${user}";
                 taps = {
                   "homebrew/homebrew-core" = homebrew-core;
                   "homebrew/homebrew-cask" = homebrew-cask;
@@ -100,8 +93,8 @@
             }
             ./hosts/darwin
           ];
-        }
-      );
+        };
+      };
 
       nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
         inherit system;

@@ -1,14 +1,12 @@
 { config, inputs, pkgs, ... }:
 
-let
-  user = "%USER%";
-  sshKeys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOk8iAnIaa1deoc7jw8YACPNVka1ZFJxhnU4G74TmS+p"
-  ];
-in {
+let user = "%USER%";
+    keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOk8iAnIaa1deoc7jw8YACPNVka1ZFJxhnU4G74TmS+p" ]; in
+{
   imports = [
     ../../modules/nixos/disk-config.nix
     ../../modules/shared
+    ../../modules/shared/cachix
   ];
 
   # Use the systemd-boot EFI boot loader.
@@ -21,8 +19,6 @@ in {
       efi.canTouchEfiVariables = true;
     };
     initrd.availableKernelModules = [ "xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod" ];
-    # Uncomment for AMD GPU
-    # initrd.kernelModules = [ "amdgpu" ];
     kernelPackages = pkgs.linuxPackages_latest;
     kernelModules = [ "uinput" ];
   };
@@ -42,18 +38,12 @@ in {
   # Turn on flag for proprietary software
   nix = {
     nixPath = [ "nixos-config=/home/${user}/.local/share/src/nixos-config:/etc/nixos" ];
-    settings = {
-      allowed-users = [ "${user}" ];
-      trusted-users = [ "@admin" "${user}" ];
-      substituters = [ "https://nix-community.cachix.org" "https://cache.nixos.org" ];
-      trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
-    };
-
-    package = pkgs.nix;
+    settings.allowed-users = [ "${user}" ];
+    package = pkgs.nixUnstable;
     extraOptions = ''
       experimental-features = nix-command flakes
     '';
-  };
+   };
 
   # Manages keys and such
   programs = {
@@ -66,30 +56,25 @@ in {
     zsh.enable = true;
   };
 
-  services = {
-    # Fallback console on tty1: auto-login your user
-    getty.autologinUser = user;
-    getty.autologinOnce = false;
-
-    # Display manager & X server
-    displayManager.defaultSession = "none+bspwm";
+  services = { 
     xserver = {
       enable = true;
 
       # Uncomment these for AMD or Nvidia GPU
       # boot.initrd.kernelModules = [ "amdgpu" ];
-      # videoDrivers = [ "amdgpu" ];
-      # videoDrivers = [ "nvidia" ];
+      # services.xserver.videoDrivers = [ "amdgpu" ];
+      # services.xserver.videoDrivers = [ "nvidia" ];
 
-      # Uncomment for Nvidia GPU
+      # Comment this for AMD GPU
       # This helps fix tearing of windows for Nvidia cards
-      # screenSection = ''
+      # services.xserver.screenSection = ''
       #   Option       "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
       #   Option       "AllowIndirectGLXProtocol" "off"
       #   Option       "TripleBuffer" "on"
       # '';
 
       displayManager = {
+        defaultSession = "none+bspwm";
         lightdm = {
           enable = true;
           greeters.slick.enable = true;
@@ -102,18 +87,14 @@ in {
         enable = true;
       };
 
-      xkb = {
-        # Turn Caps Lock into Ctrl
-        layout = "us";
-        options = "ctrl:nocaps";
-      };
+      # Turn Caps Lock into Ctrl
+      layout = "us";
+      xkbOptions = "ctrl:nocaps";
+
+      # Better support for general peripherals
+      libinput.enable = true;
+
     };
-
-    # Better support for general peripherals
-    libinput.enable = true;
-
-    # Let's be able to SSH into this machine
-    openssh.enable = true;
 
     # Sync state between machines
     syncthing = {
@@ -128,7 +109,30 @@ in {
       overrideDevices = true;
 
       settings = {
-        devices = {};
+        devices = {
+          "Macbook Pro" = {
+            id = "P2FYLQW-PKDFJGZ-EUGI2T7-OW4AH4I-KI462HD-U2VL3X3-GN55PP2-VNRE5AH";
+            autoAcceptFolders = true;
+            allowedNetwork = "192.168.0.0/16";
+            addresses = [ "tcp://192.168.0.99:51820" ];
+          };
+          "Home Lab" = {
+            id = "WW5O366-THBBBA3-HKQAYCP-EWADS4I-4KDDC5Z-3JCO42M-RLBZ3DY-NM7PEQA";
+            allowedNetwork = "192.168.0.0/16";
+            autoAcceptFolders = true;
+            addresses = [ "tcp://192.168.0.103:51820" ];
+          };
+
+        };
+
+        folders = {
+          "XDG Share" = {
+            id = "ukrub-quh7k";
+            path = "/home/${user}/.local/share";
+            devices = [ "Macbook Pro" "Home Lab" ];
+          };
+        };
+
         options.globalAnnounceEnabled = false; # Only sync on LAN
       };
     };
@@ -228,19 +232,23 @@ in {
       };
     };
 
+    # Let's be able to SSH into this machine
+    openssh.enable = true;
+
+    # Emacs runs as a daemon
+    emacs = {
+      enable = true;
+      package = pkgs.emacs-unstable;
+    };
+
+    # When emacs builds from no cache, it exceeds the 90s timeout default
+    systemd.user.services.emacs = {
+      serviceConfig.TimeoutStartSec = "7min";
+    };
+
     gvfs.enable = true; # Mount, trash, and other functionalities
     tumbler.enable = true; # Thumbnail support for images
 
-    # Emacs runs as a daemon
-    #emacs = {
-    #  enable = true;
-    #  package = pkgs.emacs-unstable;
-    #};
-  };
-
-  # When emacs builds from no cache, it exceeds the 90s timeout default
-  systemd.user.services.emacs = {
-    serviceConfig.TimeoutStartSec = "7min";
   };
 
   # Enable sound
@@ -248,7 +256,7 @@ in {
 
   # Video support
   hardware = {
-    graphics.enable = true;
+    opengl.enable = true;
     # pulseaudio.enable = true;
     # hardware.nvidia.modesetting.enable = true;
 
@@ -258,6 +266,7 @@ in {
     # Crypto wallet support
     ledger.enable = true;
   };
+
 
   # Add docker daemon
   virtualisation = {
@@ -276,13 +285,13 @@ in {
         "docker"
       ];
       shell = pkgs.zsh;
-      openssh.authorizedKeys.keys = sshKeys;
+      openssh.authorizedKeys.keys = keys;
     };
 
     root = {
-      openssh.authorizedKeys.keys = sshKeys;
+      openssh.authorizedKeys.keys = keys;
     };
-  };
+};
 
   # Don't require password for users in `wheel` group for these commands
   security.sudo = {
@@ -298,20 +307,22 @@ in {
     }];
   };
 
+  # @todo: submit feather-font PR to nixpkgs
   fonts.packages = with pkgs; [
     dejavu_fonts
     emacs-all-the-icons-fonts
-    feather-font # from overlay
+    feather-font # package comes from dustinlyons/nixpkgs
     jetbrains-mono
     font-awesome
     noto-fonts
-    noto-fonts-color-emoji
+    noto-fonts-emoji
   ];
 
   environment.systemPackages = with pkgs; [
-    gitFull
+    gitAndTools.gitFull
     inetutils
   ];
 
   system.stateVersion = "21.05"; # Don't change this
+
 }
