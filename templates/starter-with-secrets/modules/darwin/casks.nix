@@ -3,30 +3,34 @@ _:
 [
   # Development Tools
   "homebrew/cask/docker"
+  "insomnia"
+  "ngrok"
+  "postico"
   "visual-studio-code"
-  "iterm2"
-  "postman"
-  "cursor"
+
+  # Communication Tools
+  "discord"
+  "loom"
+  "notion"
+  "slack"
+  "telegram"
+  "zoom"
+
+  # Utility Tools
+  "appcleaner"
+  "syncthing"
+
+  # Entertainment Tools
+  "steam"
+  "vlc"
 
   # Productivity Tools
   "raycast"
+  "asana"
 
   # Browsers
   "google-chrome"
 
-  # Communication Tools - Examples (uncomment as needed)
-  # "discord"
-  # "notion"
-  # "slack"
-  # "telegram"
-  # "zoom"
-
-  # Utility Tools - Examples (uncomment as needed)
-  # "syncthing"
-  # "1password"
-  # "rectangle"
-
-  # Entertainment Tools - Examples (uncomment as needed)
-  # "spotify"
-  # "vlc"
+  # AI
+  "diffusionbee"
 ]

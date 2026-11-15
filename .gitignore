@@ -2,7 +2,3 @@
 *.swp
 result
 .DS_Store
-.claude
-modules/nixos/scripts/__pycache__/
-tests/garage-analyzer/__pycache__/
-modules/nixos/wow-chat-watch/__pycache__/

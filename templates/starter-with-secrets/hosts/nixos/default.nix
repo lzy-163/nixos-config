@@ -7,6 +7,7 @@ let user = "%USER%";
     ../../modules/nixos/secrets.nix
     ../../modules/nixos/disk-config.nix
     ../../modules/shared
+    ../../modules/shared/cachix
     agenix.nixosModules.default
   ];
 
@@ -20,8 +21,6 @@ let user = "%USER%";
       efi.canTouchEfiVariables = true;
     };
     initrd.availableKernelModules = [ "xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod" ];
-    # Uncomment for AMD GPU
-    # initrd.kernelModules = [ "amdgpu" ];
     kernelPackages = pkgs.linuxPackages_latest;
     kernelModules = [ "uinput" ];
   };
@@ -38,20 +37,15 @@ let user = "%USER%";
     interfaces."%INTERFACE%".useDHCP = true;
   };
 
+  # Turn on flag for proprietary software
   nix = {
     nixPath = [ "nixos-config=/home/${user}/.local/share/src/nixos-config:/etc/nixos" ];
-    settings = {
-      allowed-users = [ "${user}" ];
-      trusted-users = [ "@admin" "${user}" ];
-      substituters = [ "https://nix-community.cachix.org" "https://cache.nixos.org" ];
-      trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
-    };
-
-    package = pkgs.nix;
+    settings.allowed-users = [ "${user}" ];
+    package = pkgs.nixUnstable;
     extraOptions = ''
       experimental-features = nix-command flakes
     '';
-  };
+   };
 
   # Manages keys and such
   programs = {
@@ -65,15 +59,15 @@ let user = "%USER%";
   };
 
   services = {
-    displayManager.defaultSession = "none+bspwm";
     xserver = {
       enable = true;
 
       # Uncomment these for AMD or Nvidia GPU
-      # videoDrivers = [ "amdgpu" ];
-      # videoDrivers = [ "nvidia" ];
+      # boot.initrd.kernelModules = [ "amdgpu" ];
+      # services.xserver.videoDrivers = [ "amdgpu" ];
+      # services.xserver.videoDrivers = [ "nvidia" ];
 
-      # Uncomment this for Nvidia GPU
+      # Comment this for AMD GPU
       # This helps fix tearing of windows for Nvidia cards
       # services.xserver.screenSection = ''
       #   Option       "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
@@ -82,6 +76,7 @@ let user = "%USER%";
       # '';
 
       # LightDM Display Manager
+      displayManager.defaultSession = "none+bspwm";
       displayManager.lightdm = {
         enable = true;
         greeters.slick.enable = true;
@@ -93,20 +88,14 @@ let user = "%USER%";
         enable = true;
       };
 
-      xkb = {
-        # Turn Caps Lock into Ctrl
-        layout = "us";
-        options = "ctrl:nocaps";
-      };
+      # Turn Caps Lock into Ctrl
+      layout = "us";
+      xkbOptions = "ctrl:nocaps";
+
+      # Better support for general peripherals
+      libinput.enable = true;
     };
 
-    # Better support for general peripherals
-    libinput.enable = true;
-
-    # Let's be able to SSH into this machine
-    openssh.enable = true;
-
-    # Sync state between machines
     # Sync state between machines
     syncthing = {
       enable = true;
@@ -120,9 +109,47 @@ let user = "%USER%";
       overrideDevices = true;
 
       settings = {
-        devices = {};
+        devices = {
+          "Macbook Pro" = {
+            id = "P2FYLQW-PKDFJGZ-EUGI2T7-OW4AH4I-KI462HD-U2VL3X3-GN55PP2-VNRE5AH";
+            autoAcceptFolders = true;
+            allowedNetwork = "192.168.0.0/16";
+            addresses = [ "tcp://192.168.0.99:51820" ];
+          };
+          "Home Lab" = {
+            id = "WW5O366-THBBBA3-HKQAYCP-EWADS4I-4KDDC5Z-3JCO42M-RLBZ3DY-NM7PEQA";
+            allowedNetwork = "192.168.0.0/16";
+            autoAcceptFolders = true;
+            addresses = [ "tcp://192.168.0.103:51820" ];
+          };
+        };
+
+        folders = {
+          "XDG Share" = {
+            id = "ukrub-quh7k";
+            path = "/home/${user}/.local/share";
+            devices = [ "Macbook Pro" "Home Lab" ];
+          };
+        };
+
         options.globalAnnounceEnabled = false; # Only sync on LAN
       };
+    };
+
+    # Let's be able to SSH into this machine
+    openssh.enable = true;
+    gvfs.enable = true; # Mount, trash, and other functionalities
+    tumbler.enable = true; # Thumbnail support for images
+
+    # Emacs runs as a daemon
+    emacs = {
+      enable = true;
+      package = pkgs.emacs-unstable;
+    };
+
+    # When emacs builds from no cache, it exceeds the 90s timeout default
+    systemd.user.services.emacs = {
+      serviceConfig.TimeoutStartSec = "7min";
     };
 
     # Picom, my window compositor with fancy effects
@@ -215,20 +242,6 @@ let user = "%USER%";
         };
       };
     };
-
-    gvfs.enable = true; # Mount, trash, and other functionalities
-    tumbler.enable = true; # Thumbnail support for images
-
-    # Emacs runs as a daemon
-    #emacs = {
-    #  enable = true;
-    #  package = pkgs.emacs-unstable;
-    #};
-  };
-
-  # When emacs builds from no cache, it exceeds the 90s timeout default
-  systemd.user.services.emacs = {
-    serviceConfig.TimeoutStartSec = "7min";
   };
 
   # Enable CUPS to print documents
@@ -241,7 +254,7 @@ let user = "%USER%";
 
   # Video support
   hardware = {
-    graphics.enable = true;
+    opengl.enable = true;
     # nvidia.modesetting.enable = true;
 
     # Enable Xbox support
@@ -290,16 +303,16 @@ let user = "%USER%";
   fonts.packages = with pkgs; [
     dejavu_fonts
     emacs-all-the-icons-fonts
-    feather-font # from overlay
+    feather-font # dustinlyons/nixpkgs
     jetbrains-mono
     font-awesome
     noto-fonts
-    noto-fonts-color-emoji
+    noto-fonts-emoji
   ];
 
   environment.systemPackages = with pkgs; [
     agenix.packages."${pkgs.system}".default # "x86_64-linux"
-    gitFull
+    gitAndTools.gitFull
     inetutils
   ];
 

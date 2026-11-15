@@ -1,416 +1,329 @@
-{ config, lib, pkgs, modulesPath, user, ... }:
+{ config, inputs, lib, pkgs, agenix, ... }:
 
-let
-  myEmacs = import ../../modules/shared/emacs.nix { inherit pkgs; };
-in
-
+let user = "dustin";
+    keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOk8iAnIaa1deoc7jw8YACPNVka1ZFJxhnU4G74TmS+p" ]; in
 {
   imports = [
-    (modulesPath + "/installer/scan/not-detected.nix")
-
-    # Import shared configuration (tmux, zsh, packages, etc.)
-    # Comment these out initially if you want to start completely minimal
+    ../../modules/nixos/secrets.nix
+    ../../modules/nixos/disk-config.nix
     ../../modules/shared
-    
-    # Systemd services and timers
-    ../../modules/nixos/systemd.nix
-
-    # WoW chat-log watcher: popups + history for LFG / recruitment messages
-    ../../modules/nixos/wow-chat-watch.nix
-    ../../modules/nixos/wow.nix
-
-    # Lead pipeline (~/src/scraper): Postgres + the `leads` user service
-    ../../modules/nixos/leads.nix
-
-    # Meshy → Blender → Unity pipeline: Unity Hub + Unity CLI + nix-ld + Blender
-    ../../modules/nixos/game-dev.nix
-
-    # Kills dev servers left in deleted worktrees and orphaned demo Postgres
-    ../../modules/nixos/dev-reaper.nix
-
-    # Agenix for secrets management - temporarily disabled
-    # inputs.agenix.nixosModules.default
+    ../../modules/shared/cachix
+    agenix.nixosModules.default
   ];
 
-  # Hardware Configuration (merged from hardware-configuration.nix)
+  # Use the systemd-boot EFI boot loader.
   boot = {
-    loader.systemd-boot = {
-      enable             = true;
-      configurationLimit = 1;   # ESP is only 96M — can't fit more than one generation (~41M each)
-      # Nov 2026: three hard resets in one day with nothing in the journal, and
-      # bit-flip-looking zsh/php segfaults the week before. 4x Crucial Pro
-      # DDR5-6000 on AM5 is a known-marginal config; keep memtest one reboot away.
-      memtest86.enable   = true;
+    loader = {
+      systemd-boot = {
+        enable = true;
+        configurationLimit = 42;
+      };
+      efi.canTouchEfiVariables = true;
     };
-    loader.efi.canTouchEfiVariables = true;
-
-    initrd.availableKernelModules = [ "nvme" "xhci_pci" "ahci" "usb_storage" "usbhid" "sd_mod" ];
-    initrd.kernelModules        = [];
-    # ntsync: kernel NT sync primitives; Proton uses /dev/ntsync when present
-    kernelModules               = [ "kvm-amd" "uinput" "ntsync" ];
-    kernelParams = [
-      # Essential parameters for ASUS PG278Q monitor with RX 9070 GPU
-      "amdgpu.dc=1"              # Force display core (required for RDNA 4 GPUs)
-      "drm.edid_firmware=DP-2:edid/PG278Q.bin" # Force EDID for ASUS PG278Q monitor
-      "video=DP-2:2560x1440@60e" # Force CVT timing to ensure proper display
-      # GPU stability parameters
-      "amdgpu.gpu_recovery=1"    # Enable GPU recovery after timeouts
-      "amdgpu.runpm=0"          # Disable runtime power management for stability
-    ];
-    kernelPackages              = pkgs.linuxPackages_latest;
-    #kernelModules               = [ "kvm-amd" "uinput" "v4l2loopback" ];
-    #extraModulePackages         = [ pkgs.linuxPackages.v4l2loopback ];
-  };
-
-  # Filesystems
-  fileSystems = {
-    "/" = {
-      device = "/dev/disk/by-uuid/27bb6e75-80f8-4072-8974-83f5a45cbe48";
-      fsType = "ext4";
-    };
-
-    "/boot" = {
-      device = "/dev/disk/by-uuid/8AC5-E75B";
-      fsType = "vfat";
-      options = [ "fmask=0077" "dmask=0077" ];
-    };
-
-    # Windows partition mount
-    "/mnt/windows" = {
-      device = "/dev/nvme0n1p3";
-      fsType = "ntfs-3g";
-      options = [
-        "defaults"
-        "uid=1000"
-        "gid=100"
-        "umask=0022"
-        "nofail"
-      ];
-    };
-  };
-
-  swapDevices = [ ];
-
-  # Hardware platform
-  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
-  
-  # Hardware support for gaming
-  hardware = {
-    enableRedistributableFirmware = true;
-    # BIOS 3072 ships microcode 0x0a601209 and the kernel reports "Vulnerable:
-    # No microcode"; load AMD's current microcode early from the initrd.
-    cpu.amd.updateMicrocode = true;
-    # Log machine-check / memory-controller errors to a persistent sqlite db
-    # (ras-mc-ctl --errors) so the next hard reset leaves hardware evidence.
-    rasdaemon.enable = true;
-
-    bluetooth = {
-      enable = true;
-      powerOnBoot = true;
-    };
-
-    graphics = {
-      enable = true;
-      enable32Bit = true;
-    };
-
-    # Xbox One / Series X|S controllers, incl. the Xbox Wireless Adapter dongle.
-    # Pulls in the xone modules for the running kernel + the dongle firmware, and
-    # blacklists mt76x2u, which otherwise claims the dongle (045e:02fe is an
-    # MT7612U) and exposes it as a useless wifi interface.
-    xone.enable = true;
-
-    # Custom EDID firmware for ASUS PG278Q ROG Swift
-    firmware = with pkgs; [ 
-      (runCommand "pg278q-edid" {} ''
-        mkdir -p $out/lib/firmware/edid
-        cp ${./firmware/edid/PG278Q.bin} $out/lib/firmware/edid/PG278Q.bin
-        cp ${./firmware/edid/PG278Q.bin} $out/lib/firmware/edid/DP-2.bin
-      '')
-    ];
-
-  };
-
-  # Networking
-  networking = {
-    hostName        = "felix";
-    useDHCP         = lib.mkDefault true;
-    # networking.interfaces.eno1.useDHCP = lib.mkDefault true;
-    networkmanager.enable = true;
-
-    # Firewall on, nothing opened globally. Before 2026-09-11 this was
-    # `firewall.enable = false`, which left the Conductly dev database
-    # (mariadb :3306), `php artisan serve` (:8000), Vite (:5173), Storybook
-    # (:6006) and the Atlas webhook listener (:8788) reachable from every phone,
-    # TV and guest device on the client VLAN. Those dev servers still bind
-    # 0.0.0.0 (as of 2026-09-16: mariadb :3306, PHP :8000, Next :3000,
-    # Storybook :6006, epmd :4369, and Vite on the LAN address :5173) — the
-    # firewall is what keeps them off the LAN, not their bind address. The two
-    # things other machines legitimately reach get source-restricted rules
-    # below, in the same style garfield uses.
-    #
-    # programs.steam's remotePlay/dedicatedServer openFirewall options (above)
-    # declare their own ports and start taking effect now that this is on.
-    # IPv4 only, like garfield: the LAN does not route IPv6.
-    firewall = {
-      enable = true;
-      allowedTCPPorts = [];
-      extraCommands = ''
-        # SSH from the two LAN VLANs and the UDM's remote-access VPN.
-        iptables -A nixos-fw -p tcp --dport 22 -s 10.0.10.0/24 -j nixos-fw-accept
-        iptables -A nixos-fw -p tcp --dport 22 -s 192.168.0.0/24 -j nixos-fw-accept
-        iptables -A nixos-fw -p tcp --dport 22 -s 192.168.1.0/24 -j nixos-fw-accept
-
-        # Atlas webhook receiver (systemd.nix binds it to 0.0.0.0:8788).
-        # garfield's nginx is the only legitimate caller (hooks-proxy.nix) and
-        # it lives on the server VLAN; nothing on the client VLAN needs this.
-        iptables -A nixos-fw -p tcp --dport 8788 -s 10.0.10.0/24 -j nixos-fw-accept
-
-        # mDNS from the client VLAN, so Chrome casting and Steam's LAN
-        # discovery keep working (both were seen bound to 5353 when this was
-        # written). Multicast queries are unsolicited, so the default
-        # established/related rule does not cover them.
-        iptables -A nixos-fw -p udp --dport 5353 -s 192.168.0.0/24 -j nixos-fw-accept
-
-        # Opt-in: testing the Conductly dev build from a phone on the client
-        # VLAN. Vite was deliberately bound to this box's LAN address, so this
-        # was probably in use; uncomment if it is. Leave 3306 closed regardless.
-        # iptables -A nixos-fw -p tcp --dport 5173 -s 192.168.0.0/24 -j nixos-fw-accept
-        # iptables -A nixos-fw -p tcp --dport 8000 -s 192.168.0.0/24 -j nixos-fw-accept
-      '';
-      extraStopCommands = ''
-        iptables -D nixos-fw -p tcp --dport 22 -s 10.0.10.0/24 -j nixos-fw-accept 2>/dev/null || true
-        iptables -D nixos-fw -p tcp --dport 22 -s 192.168.0.0/24 -j nixos-fw-accept 2>/dev/null || true
-        iptables -D nixos-fw -p tcp --dport 22 -s 192.168.1.0/24 -j nixos-fw-accept 2>/dev/null || true
-        iptables -D nixos-fw -p tcp --dport 8788 -s 10.0.10.0/24 -j nixos-fw-accept 2>/dev/null || true
-        iptables -D nixos-fw -p udp --dport 5353 -s 192.168.0.0/24 -j nixos-fw-accept 2>/dev/null || true
-        # iptables -D nixos-fw -p tcp --dport 5173 -s 192.168.0.0/24 -j nixos-fw-accept 2>/dev/null || true
-        # iptables -D nixos-fw -p tcp --dport 8000 -s 192.168.0.0/24 -j nixos-fw-accept 2>/dev/null || true
-      '';
-    };
-
-    # Custom hosts entries
-    extraHosts = ''
-      10.0.10.2 lab-1
-      10.0.10.3 lab-2
-    '';
+    initrd.availableKernelModules = [ "xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod" ];
+    kernelPackages = pkgs.linuxPackages_latest;
+    kernelModules = [ "uinput" ];
   };
 
   # Set your time zone.
-  time.timeZone = "America/Kentucky/Louisville";
+  time.timeZone = "America/New_York";
 
-  # Select internationalisation properties.
-  i18n.defaultLocale      = "en_US.UTF-8";
-  i18n.extraLocaleSettings = {
-    LC_ADDRESS        = "en_US.UTF-8";
-    LC_IDENTIFICATION = "en_US.UTF-8";
-    LC_MEASUREMENT    = "en_US.UTF-8";
-    LC_MONETARY       = "en_US.UTF-8";
-    LC_NAME           = "en_US.UTF-8";
-    LC_NUMERIC        = "en_US.UTF-8";
-    LC_PAPER          = "en_US.UTF-8";
-    LC_TELEPHONE      = "en_US.UTF-8";
-    LC_TIME           = "en_US.UTF-8";
+  # The global useDHCP flag is deprecated, therefore explicitly set to false here.
+  # Per-interface useDHCP will be mandatory in the future, so this generated config
+  # replicates the default behaviour.
+  networking = {
+    hostName = "felix"; # Define your hostname.
+    useDHCP = false;
+    interfaces.eno1.useDHCP = true;
   };
 
-  # Programs configuration
-  programs = {
-    zsh.enable = true;
-    steam = {
-      enable = true;
-      remotePlay.openFirewall = true;
-      dedicatedServer.openFirewall = true;
-      # GE-Proton 11-7+ fixes Warcraft III's false "check your VPN" login error
-      # (crypt32 rejects the game's 88-byte cert chain engine config).
-      extraCompatPackages = [ pkgs.proton-ge-bin ];
-    };
-    # Daemon for `gamemoderun %command%`: performance CPU governor while a game runs
-    gamemode.enable = true;
-  };
-
-  # Let the logged-in user open /dev/ntsync (root-only by default)
-  services.udev.extraRules = ''
-    KERNEL=="ntsync", MODE="0660", TAG+="uaccess"
-  '';
-
-  # Console configuration for virtual terminals
-  console.useXkbConfig = true;
-
-  # Services configuration
-  services = {
-    emacs = {
-      enable = true;
-      package = myEmacs;
-    };
-
-
-    xserver = {
-     enable = true;
-     videoDrivers = ["amdgpu"];
-     xkb = {
-       layout = "us";
-       options = "ctrl:nocaps";
-     };
-    };
-    
-
-    displayManager.sddm.enable = true;
-    desktopManager.plasma6.enable = true;
-
-    # Enable CUPS to print documents.
-    printing.enable = true;
-
-    # Enable sound with PipeWire (PulseAudio disabled in favor of PipeWire).
-    pulseaudio.enable = false;
-
-    pipewire = {
-      enable = true;
-      alsa = {
-        enable = true;
-        support32Bit = true;
-      };
-      pulse.enable = true;
-    };
-
-    # Enable the OpenSSH daemon. Keys only: this desktop has no firewall and
-    # shares the client VLAN with every phone and IoT device in the house.
-    openssh = {
-      enable = true;
-      # Port 22 is opened per-source in networking.firewall.extraCommands
-      # above; the module's default would open it to every address first and
-      # make those rules meaningless.
-      openFirewall = false;
-      settings = {
-        PasswordAuthentication = false;
-        KbdInteractiveAuthentication = false;
-      };
-    };
-
-    # Bluetooth
-    blueman.enable = true;
-
-    # Key remapping service
-    keyd = {
-      enable = true;
-      keyboards.default.settings.main = {
-        end = "sysrq";  # Map End key to Print Screen
-      };
-    };
-
-  };
-
-  # Define a user account. Don't forget to set a password with 'passwd'.
-  users.users.${user} = {
-    isNormalUser = true;
-    description  = "Dustin Lyons";
-    extraGroups  = [ "networkmanager" "wheel" "docker" ];
-    shell = pkgs.zsh;
-  };
-
-  services.displayManager.autoLogin.enable = true;
-  services.displayManager.autoLogin.user = "dustin";
-
-  # Allow unfree packages
-  nixpkgs.config.allowUnfree = true;
-
-  # Enable mesa-git from Chaotic Nyx - disabled for GPU stability
-  # chaotic.mesa-git.enable = true;
-
-  # List packages installed in system profile. To search, run:
-  #   $ nix search <pkg>
-  environment.systemPackages = with pkgs; [
-    vim
-    git
-    myEmacs
-    wl-clipboard     # Wayland clipboard utilities (replaces xclip)
-    wayland-utils    # Wayland utilities
-    lm_sensors       # Hardware monitoring sensors
-    btop             # Modern resource monitor with temp display
-    bun              # JS runtime for the atlas devenv service (migrated from garfield)
-    bubblewrap       # Unprivileged sandboxing tool
-  ];
-
-  # Don't require a password for `reboot`. nixos-rebuild used to be listed
-  # here too; it was removed 2026-09-11 because it evaluates and activates
-  # arbitrary Nix, so a passwordless entry for it is a passwordless root
-  # shell for anyone holding a wheel session (this desktop auto-logs in).
-  # `nix run .#build-switch` now prompts once per switch.
-  security.sudo = {
-    enable     = true;
-    extraRules = [
-      {
-        commands = [
-          {
-            command = "${pkgs.systemd}/bin/reboot";
-            options = [ "NOPASSWD" ];
-          }
-        ];
-        groups = [ "wheel" ];
-      }
-    ];
-  };
-
-  # Fonts
-  fonts.packages = import ../../modules/shared/fonts.nix { inherit pkgs; };
-
-  # Configure Nix settings for flakes and Cachix
+  # Turn on flag for proprietary software
   nix = {
-    nixPath = [
-      "nixos-config=/home/${user}/.local/share/src/nixos-config:/etc/nixos"
-    ];
-    settings = {
-      allowed-users       = [ "${user}" ];
-      trusted-users       = [ "@admin" "${user}" "root" ];
-      substituters        = [
-        "https://nix-community.cachix.org"
-        "https://cache.nixos.org"
-      ];
-      trusted-public-keys = [
-        "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-        "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-      ];
-      experimental-features = [ "nix-command" "flakes" ];
-    };
-    package      = pkgs.nix;
+    nixPath = [ "nixos-config=/home/${user}/.local/share/src/nixos-config:/etc/nixos" ];
+    settings.allowed-users = [ "${user}" ];
+    package = pkgs.nixUnstable;
     extraOptions = ''
       experimental-features = nix-command flakes
     '';
+   };
 
-    # Collect garbage weekly. This trims what the Nix store holds; the boot
-    # menu is a separate limit (configurationLimit above, capped by the 96M
-    # ESP), so this governs how far back `nixos-rebuild --rollback` can reach,
-    # not how many entries appear at boot. The running generation is never
-    # deleted.
-    gc = {
-      automatic = true;
-      dates     = "weekly";
-      options   = "--delete-older-than 30d";
+  # Manages keys and such
+  programs = {
+    gnupg.agent.enable = true;
+
+    # Needed for anything GTK related
+    dconf.enable = true;
+
+    # My shell
+    zsh.enable = true;
+  };
+
+  services = {
+    xserver = {
+      enable = true;
+
+      # Uncomment these for AMD GPU
+      # boot.initrd.kernelModules = [ "amdgpu" ];
+      # services.xserver.videoDrivers = [ "amdgpu" ];
+      videoDrivers = [ "nvidia" ];
+
+      # Comment this for AMD GPU
+      # This helps fix tearing of windows for Nvidia cards
+      screenSection = ''
+        Option       "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
+        Option       "AllowIndirectGLXProtocol" "off"
+        Option       "TripleBuffer" "on"
+      '';
+
+      # LightDM Display Manager
+      displayManager.defaultSession = "none+bspwm";
+      displayManager.lightdm = {
+        enable = true;
+        greeters.slick.enable = true;
+        background = ../../modules/nixos/config/login-wallpaper.png;
+      };
+
+      # Tiling window manager
+      windowManager.bspwm = {
+        enable = true;
+      };
+
+      # Better support for general peripherals
+      libinput.enable = true;
+
+      # Turn Caps Lock into Ctrl
+      layout = "us";
+      xkbOptions = "ctrl:nocaps";
     };
 
-    # Hard-link identical files across generations. Run as a weekly job rather
-    # than settings.auto-optimise-store, which hashes every path as it is
-    # written and would slow down every build.
-    optimise = {
-      automatic = true;
-      dates     = [ "03:45" ];
+    # Enable CUPS to print documents
+    printing = {
+      enable = true;
+      drivers = [ pkgs.brlaser ]; # Brother printer driver
+    };
+
+    syncthing = {
+      enable = true;
+      openDefaultPorts = true;
+      dataDir = "/home/${user}/.local/share/syncthing";
+      configDir = "/home/${user}/.config/syncthing";
+      user = "${user}";
+      group = "users";
+      guiAddress = "127.0.0.1:8384";
+      overrideFolders = true;
+      overrideDevices = true;
+
+      settings = {
+        devices = {
+          "Macbook Pro" = {
+            id = "P2FYLQW-PKDFJGZ-EUGI2T7-OW4AH4I-KI462HD-U2VL3X3-GN55PP2-VNRE5AH";
+            autoAcceptFolders = true;
+            allowedNetwork = "192.168.0.0/16";
+            addresses = [ "tcp://192.168.0.99:51820" ];
+          };
+          "Home Lab" = {
+            id = "WW5O366-THBBBA3-HKQAYCP-EWADS4I-4KDDC5Z-3JCO42M-RLBZ3DY-NM7PEQA";
+            allowedNetwork = "192.168.0.0/16";
+            autoAcceptFolders = true;
+            addresses = [ "tcp://192.168.0.103:51820" ];
+          };
+        };
+
+        folders = {
+          "XDG Share" = {
+            id = "ukrub-quh7k";
+            path = "/home/${user}/.local/share";
+            devices = [ "Macbook Pro" "Home Lab" ];
+          };
+        };
+
+        options.globalAnnounceEnabled = false; # Only sync on LAN
+      };
+
+    };
+
+    # Picom, my window compositor with fancy effects
+    #
+    # Notes on writing exclude rules:
+    #
+    #   class_g looks up index 1 in WM_CLASS value for an application
+    #   class_i looks up index 0
+    #
+    #   To find the value for a specific application, use `xprop` at the
+    #   terminal and then click on a window of the application in question
+    #
+    picom = {
+      enable = true;
+      settings = {
+        animations = true;
+        animation-stiffness = 300.0;
+        animation-dampening = 35.0;
+        animation-clamping = false;
+        animation-mass = 1;
+        animation-for-workspace-switch-in = "auto";
+        animation-for-workspace-switch-out = "auto";
+        animation-for-open-window = "slide-down";
+        animation-for-menu-window = "none";
+        animation-for-transient-window = "slide-down";
+        corner-radius = 12;
+        rounded-corners-exclude = [
+          "class_i = 'polybar'"
+          "class_g = 'i3lock'"
+        ];
+        round-borders = 3;
+        round-borders-exclude = [];
+        round-borders-rule = [];
+        shadow = true;
+        shadow-radius = 8;
+        shadow-opacity = 0.4;
+        shadow-offset-x = -8;
+        shadow-offset-y = -8;
+        fading = false;
+        inactive-opacity = 0.8;
+        frame-opacity = 0.7;
+        inactive-opacity-override = false;
+        active-opacity = 1.0;
+        focus-exclude = [
+        ];
+
+        opacity-rule = [
+          "100:class_g = 'i3lock'"
+          "60:class_g = 'Dunst'"
+          "100:class_g = 'Alacritty' && focused"
+          "90:class_g = 'Alacritty' && !focused"
+        ];
+
+        blur-kern = "3x3box";
+        blur = {
+          method = "kernel";
+          strength = 8;
+          background = false;
+          background-frame = false;
+          background-fixed = false;
+          kern = "3x3box";
+        };
+
+        shadow-exclude = [
+          "class_g = 'Dunst'"
+        ];
+
+        blur-background-exclude = [
+          "class_g = 'Dunst'"
+        ];
+
+        backend = "glx";
+        vsync = false;
+        mark-wmwin-focused = true;
+        mark-ovredir-focused = true;
+        detect-rounded-corners = true;
+        detect-client-opacity = false;
+        detect-transient = true;
+        detect-client-leader = true;
+        use-damage = true;
+        log-level = "info";
+
+        wintypes = {
+          normal = { fade = true; shadow = false; };
+          tooltip = { fade = true; shadow = false; opacity = 0.75; focus = true; full-shadow = false; };
+          dock = { shadow = false; };
+          dnd = { shadow = false; };
+          popup_menu = { opacity = 1.0; };
+          dropdown_menu = { opacity = 1.0; };
+        };
+      };
+    };
+
+    # Let's be able to SSH into this machine
+    openssh.enable = true;
+
+    # My editor runs as a daemon
+    emacs = {
+      enable = true;
+      package = pkgs.emacs-unstable;
+    };
+
+    gvfs.enable = true; # Mount, trash, and other functionalities
+    tumbler.enable = true; # Thumbnail support for images
+  };
+
+  systemd.user.services.emacs = {
+    serviceConfig.TimeoutStartSec = "7min";
+  };
+
+  # Enable sound
+  sound.enable = true;
+  hardware = {
+    pulseaudio.enable = true;
+
+    # Video support
+    opengl = {
+      enable = true;
+      driSupport32Bit = true;
+      driSupport = true;
+    };
+
+    nvidia.modesetting.enable = true;
+
+    # Crypto wallet support
+    ledger.enable = true;
+  };
+
+  # Sync state between machines
+  # Add docker daemon
+  virtualisation = {
+    docker = {
+      enable = true;
+      logDriver = "json-file";
     };
   };
 
-  # Increase inotify watch limit to prevent warnings
-  boot.kernel.sysctl = {
-    "fs.inotify.max_user_watches" = 1048576;
+  # It's me, it's you, it's everyone
+  users.users = {
+    ${user} = {
+      isNormalUser = true;
+      extraGroups = [
+        "wheel" # Enable ‘sudo’ for the user.
+        "docker"
+      ];
+      shell = pkgs.zsh;
+      openssh.authorizedKeys.keys = keys;
+    };
+
+    root = {
+      openssh.authorizedKeys.keys = keys;
+    };
   };
 
-  # Docker
-  virtualisation.docker.enable = true;
+  # Don't require password for users in `wheel` group for these commands
+  security.sudo = {
+    enable = true;
+    extraRules = [{
+      commands = [
+       {
+         command = "${pkgs.systemd}/bin/reboot";
+         options = [ "NOPASSWD" ];
+        }
+      ];
+      groups = [ "wheel" ];
+    }];
+  };
 
-  # Create symlink for easier Windows partition access
-  systemd.tmpfiles.rules = [
-    "L+ /home/dustin/windows - - - - /mnt/windows"
+  fonts.packages = with pkgs; [
+    dejavu_fonts
+    emacs-all-the-icons-fonts
+    feather-font # dustinlyons/nixpkgs
+    jetbrains-mono
+    font-awesome
+    noto-fonts
+    noto-fonts-emoji
   ];
 
-  # This value determines the NixOS release from which default
-  # settings for stateful data were taken. Leave it at your first
-  # install's release unless you know what you're doing.
-  system.stateVersion = "25.05";
+  environment.systemPackages = with pkgs; [
+    agenix.packages."${pkgs.system}".default # "x86_64-linux"
+    gitAndTools.gitFull
+    inetutils
+  ];
+
+  system.stateVersion = "21.05"; # Don't change this
+
 }

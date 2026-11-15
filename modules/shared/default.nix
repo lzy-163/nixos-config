@@ -1,15 +1,7 @@
-{ config, pkgs, claude-code, ... }:
+{ config, pkgs, ... }:
 
 let
-  # NOTE: this pins a *moving* ref (refs/heads/master) by hash, so it goes
-  # stale every time emacs-overlay pushes upstream and every build then fails
-  # with a hash mismatch — for every host, not just the one being worked on.
-  # Bumped 2026-08-31 because it was already broken. Pinning a tag or promoting
-  # it to a proper flake input would stop this recurring.
-  emacsOverlaySha256 = "16r9yzjkjvvgfx86n2qaykjj6qw2my9mmqibpggpjj9hkrv09ipi";
-  
-  # Shared Emacs package configuration
-  myEmacs = import ./emacs.nix { inherit pkgs; };
+  emacsOverlaySha256 = "06413w510jmld20i4lik9b36cfafm501864yq8k4vxl5r4hn0j0h";
 in
 {
 
@@ -25,28 +17,15 @@ in
 
     overlays =
       # Apply each overlay found in the /overlays directory
-      let
-        path = ../../overlays;
-        hostname =
-          if (config.networking.hostName or null) == null
-          then ""
-          else config.networking.hostName;
-        excludeForHost = {
-          "garfield" = [ "cider-appimage.nix" "obsidian-appimage.nix" "curseforge-appimage.nix" "eden-appimage.nix" ];
-        };
-        excludedFiles = excludeForHost.${hostname} or [];
-      in with builtins;
+      let path = ../../overlays; in with builtins;
       map (n: import (path + ("/" + n)))
-          (filter (n:
-            (match ".*\\.nix" n != null ||
-             pathExists (path + ("/" + n + "/default.nix")))
-            && !(elem n excludedFiles))
+          (filter (n: match ".*\\.nix" n != null ||
+                      pathExists (path + ("/" + n + "/default.nix")))
                   (attrNames (readDir path)))
 
       ++ [(import (builtins.fetchTarball {
-               url = "https://github.com/nix-community/emacs-overlay/archive/refs/heads/master.tar.gz";
+               url = "https://github.com/dustinlyons/emacs-overlay/archive/refs/heads/master.tar.gz";
                sha256 = emacsOverlaySha256;
-           }))]
-      ++ [ claude-code.overlays.default ];
+           }))];
   };
 }

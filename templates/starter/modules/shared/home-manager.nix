@@ -21,7 +21,7 @@ let name = "%NAME%";
       }
     ];
 
-    initContent = lib.mkBefore ''
+    initExtraFirst = ''
       if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
         . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
         . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
@@ -31,6 +31,7 @@ let name = "%NAME%";
       export PATH=$HOME/.pnpm-packages/bin:$HOME/.pnpm-packages:$PATH
       export PATH=$HOME/.npm-packages/bin:$HOME/bin:$PATH
       export PATH=$HOME/.local/share/bin:$PATH
+      export PNPM_HOME=~/.pnpm-packages
 
       # Remove history data we don't want to see
       export HISTIGNORE="pwd:ls:cd"
@@ -60,14 +61,14 @@ let name = "%NAME%";
   git = {
     enable = true;
     ignores = [ "*.swp" ];
+    userName = name;
+    userEmail = email;
     lfs = {
       enable = true;
     };
-    settings = {
-      user.name = name;
-      user.email = email;
+    extraConfig = {
       init.defaultBranch = "main";
-      core = {
+      core = { 
 	    editor = "vim";
         autocrlf = "input";
       };
@@ -178,8 +179,7 @@ let name = "%NAME%";
         \ ]
 
       let g:startify_bookmarks = [
-        \ '~/Projects',
-        \ '~/Documents',
+        \ '~/.local/share/src',
         \ ]
 
       let g:airline_theme='bubblegum'
@@ -202,13 +202,6 @@ let name = "%NAME%";
         };
       };
 
-      # Fix for shell path when launching from desktop
-      # When launching from desktop, $SHELL may point to /bin/zsh instead of
-      # the Nix-managed shell, causing environment issues
-      terminal.shell = {
-        program = "${pkgs.zsh}/bin/zsh";
-      };
-
       font = {
         normal = {
           family = "MesloLGS NF";
@@ -218,6 +211,14 @@ let name = "%NAME%";
           (lib.mkIf pkgs.stdenv.hostPlatform.isLinux 10)
           (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin 14)
         ];
+      };
+
+      dynamic_padding = true;
+      decorations = "full";
+      title = "Terminal";
+      class = {
+        instance = "Alacritty";
+        general = "Alacritty";
       };
 
       colors = {
@@ -253,34 +254,22 @@ let name = "%NAME%";
 
   ssh = {
     enable = true;
-    enableDefaultConfig = false;
-    includes = [
+
+    extraConfig = lib.mkMerge [
+      ''
+        Host github.com
+          Hostname github.com
+          IdentitiesOnly yes
+      ''
       (lib.mkIf pkgs.stdenv.hostPlatform.isLinux
-        "/home/${user}/.ssh/config_external"
-      )
+        ''
+          IdentityFile /home/${user}/.ssh/id_github
+        '')
       (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
-        "/Users/${user}/.ssh/config_external"
-      )
+        ''
+          IdentityFile /Users/${user}/.ssh/id_github
+        '')
     ];
-    matchBlocks = {
-      "*" = {
-        # Set the default values we want to keep
-        sendEnv = [ "LANG" "LC_*" ];
-        hashKnownHosts = true;
-      };
-      # Example SSH configuration for GitHub
-      # "github.com" = {
-      #   identitiesOnly = true;
-      #   identityFile = [
-      #     (lib.mkIf pkgs.stdenv.hostPlatform.isLinux
-      #       "/home/${user}/.ssh/id_github"
-      #     )
-      #     (lib.mkIf pkgs.stdenv.hostPlatform.isDarwin
-      #       "/Users/${user}/.ssh/id_github"
-      #     )
-      #   ];
-      # };
-    };
   };
 
   tmux = {

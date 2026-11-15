@@ -1,145 +1,98 @@
 { pkgs, ... }:
-let
-  myPython = pkgs.python3.withPackages (ps: with ps; [
-    slpp
-    pip
-    rich
-    mysql-connector
-    virtualenv
-    black
-    requests
-    faker
-    textual
-    pyqt5
-    pyyaml
-    feedparser
-    python-dateutil
-  ]);
 
-  myPHP = pkgs.php83.withExtensions ({ enabled, all }: enabled ++ (with all; [
-    xdebug
-  ]));
-
-  myFonts = import ./fonts.nix { inherit pkgs; };
-in
 with pkgs; [
-  # A
-  act # Run Github actions locally
-  age # File encryption tool
-  age-plugin-yubikey # YubiKey plugin for age encryption
-  aspell # Spell checker
-  aspellDicts.en # English dictionary for aspell
+  # General packages for development and system management
+  act
+  alacritty
+  aspell
+  aspellDicts.en
+  bash-completion
+  bat
+  btop
+  coreutils
+  difftastic
+  du-dust
+  gcc
+  git-filter-repo
+  killall
+  neofetch
+  openssh
+  pandoc
+  sqlite
+  wget
+  zip
 
-  # B
-  bash-completion # Bash completion scripts
-  # bat is installed by programs.bat in modules/shared/home-manager.nix
-  btop # System monitor and process viewer
+  # Encryption and security tools
+  _1password
+  age
+  age-plugin-yubikey
+  gnupg
+  libfido2
+  pinentry
+  yubikey-manager
 
-  # C
-  claude-code # Anthropic's AI coding assistant (native binary, from sadjow/claude-code-nix)
-  coreutils # Basic file/text/shell utilities
+  # Cloud-related tools and SDKs
+  # docker
+  # docker-compose
+  awscli2
+  flyctl
+  google-cloud-sdk
+  go
+  gopls
+  ngrok
+  ssm-session-manager-plugin
+  terraform
+  terraform-ls
+  tflint
 
-  # D
-  direnv # Environment variable management per directory
-  difftastic # Structural diff tool
-  doctl # DigitalOcean CLI
-  dust # Disk usage analyzer
+  # Media-related packages
+  emacs-all-the-icons-fonts
+  imagemagick
+  dejavu_fonts
+  ffmpeg
+  fd
+  font-awesome
+  glow
+  hack-font
+  jpegoptim
+  meslo-lgs-nf
+  noto-fonts
+  noto-fonts-emoji
+  pngquant
 
-  # F
-  fd # Fast find alternative
-  ffmpeg # Multimedia framework
-  flyctl # Fly.io tools
-  # fzf is installed by programs.fzf in modules/shared/home-manager.nix
+  # PHP
+  php82
+  php82Packages.composer
+  php82Packages.php-cs-fixer
+  phpunit
 
-  # G
-  gam # Google Workspace admin CLI (GAM7); setup + usage in ~/.claude/skills/gam
-  go # Go
-  gcc # GNU Compiler Collection
-  gh # GitHub CLI
-  gh-dash # TUI dashboard for GitHub PRs/issues on top of gh (run as `gh-dash`)
-  gitleaks # Secret scanner; wired into this repo's pre-commit hook (see README)
-  glow # Markdown renderer for terminal
-  gnupg # GNU Privacy Guard
-  gopls # Go language server
+  # Node.js development tools
+  fzf
+  nodePackages.live-server
+  nodePackages.nodemon
+  nodePackages.prettier
+  nodePackages.npm
+  nodejs
 
-  # H
-  herdr # Terminal agent multiplexer
-  htop # Interactive process viewer
-  hunspell # Spell checker
+  # Source code management, Git, GitHub tools
+  gh
 
-  # I
-  iftop # Network bandwidth monitor
-  imagemagick # Image manipulation toolkit
-  intelephense # PHP LSP server
+  # Text and terminal utilities
+  htop
+  hunspell
+  iftop
+  jetbrains-mono
+  jq
+  ripgrep
+  slack
+  tree
+  tmux
+  unrar
+  unzip
+  zsh-powerlevel10k
 
-  # J
-  jpegoptim # JPEG optimizer
-  jq # JSON processor
-
-  # K
-  killall # Kill processes by name
-  kubectl # Kubernetes CLI
-
-  # L
-  lazydocker # Terminal UI for containers, logs and compose projects
-  lazygit # Terminal UI for git: stage hunks, rebase, resolve conflicts
-  linear-cli # Linear project management CLI
-  lnav # Log file navigator
-  libfido2 # FIDO2 library
-
-  # M
-  myPHP # Custom PHP with extensions
-  myPython # Custom Python with packages
-
-  # N
-  ncurses # Terminal control library with terminfo database
-  ncdu # Disk space utility
-  ngrok # Secure tunneling service
-  nodejs_24 # Node.js JavaScript runtime (includes npm)
-
-  # O
-  openssh # SSH client and server
-
-  # P
-  pandoc # Document converter
-  php83Packages.composer # PHP dependency manager
-  deployer # PHP deployment tool
-  php83Packages.php-cs-fixer # PHP code style fixer
-  phpstan # PHP static analysis tool
-  phpactor # PHP language server with better refactoring support
-  phpunit # PHP testing framework
-  pngquant # PNG compression tool
-
-  # Q
-  qt5.qtbase # Qt5 base library with platform plugins
-
-  # R
-  ripgrep # Fast text search tool
-  repomix # AI tooling
-
-  # S
-  slack # Team communication app
-  sqlite # SQL database engine
-  stripe-cli
-  sox # Audio dep required for Claude Code Voice
-
-  # T
-  terraform # Infrastructure as code tool
-  terraform-ls # Terraform language server
-  tflint # Terraform linter
-  tmux # Terminal multiplexer
-  tree # Directory tree viewer
-
-  # U
-  unrar # RAR archive extractor
-  unzip # ZIP archive extractor
-  uv # Python package installer
-
-  # W
-  wget # File downloader
-
-  # Z
-  zed-editor
-  zip # ZIP archive creator
-  zsh-powerlevel10k # Zsh theme
-] ++ myFonts
+  # Python packages
+  black
+  python39
+  python39Packages.virtualenv
+]
