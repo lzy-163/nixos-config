@@ -15,6 +15,7 @@ on:
 jobs:
   lint:
     uses: ./.github/workflows/lint.yml
+    secrets: inherit
     with:
       template: 'starter'
       arch: 'x86_64-linux'
@@ -22,6 +23,7 @@ jobs:
   build-starter-template:
     needs: lint
     uses: ./.github/workflows/build-template.yml
+    secrets: inherit
     with:
       template: 'starter'
       arch: 'x86_64-linux'
