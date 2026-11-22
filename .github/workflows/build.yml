@@ -25,3 +25,4 @@ jobs:
     with:
       template: 'starter'
       arch: 'x86_64-linux'
+    secrets: inherit
