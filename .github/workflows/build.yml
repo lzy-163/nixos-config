@@ -16,12 +16,12 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yml
     with:
-      template: 'starter'
-      arch: 'x86_64-linux'
+      template: starter
+      arch: x86_64-linux
 
   build-starter-template:
     needs: lint
     uses: ./.github/workflows/build-template.yml
     with:
-      template: 'starter'
-      arch: 'x86_64-linux'
+      template: starter
+      arch: x86_64-linux
